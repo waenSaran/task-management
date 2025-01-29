@@ -14,7 +14,6 @@ import (
 func main() {
 	godotenv.Load()
 	config.ConnectDB()
-	config.InitSupabase()
 
 	app := fiber.New()
 	app.Use(logger.New())
@@ -22,8 +21,9 @@ func main() {
 	api := app.Group("/api")
 	v1 := api.Group("/v1")
 
-	routes.AuthRoutes(v1) // Authentication routes
-	routes.TaskRoutes(v1) // Protected task routes
+	routes.AuthRoutes(v1)
+	routes.TaskRoutes(v1)
+	routes.CommentRoutes(v1)
 
 	port := os.Getenv("PORT")
 	log.Fatal(app.Listen(":" + port))

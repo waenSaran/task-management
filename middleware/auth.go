@@ -7,7 +7,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// AuthMiddleware ensures requests have a valid Supabase token
 func AuthMiddleware(c *fiber.Ctx) error {
 	authHeader := c.Get("Authorization")
 

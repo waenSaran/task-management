@@ -98,8 +98,8 @@ func UpdateTask(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request"})
 	}
 
-	// validate status
-	if !validateStatus(string(updatedTask.Status)) {
+	// validate status if status exists
+	if updatedTask.Status != "" && !validateStatus(string(updatedTask.Status)) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Status must be one of: TODO, IN_PROGRESS, DONE"})
 	}
 
@@ -109,6 +109,11 @@ func UpdateTask(c *fiber.Ctx) error {
 		Status:      updatedTask.Status,
 		Assignee:    updatedTask.Assignee,
 		UpdatedBy:   user.ID,
+	}
+
+	// Update history before updating the task
+	if err := AddHistory(taskID, payload); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update history"})
 	}
 
 	// Update the task
@@ -134,8 +139,18 @@ func DeleteTask(c *fiber.Ctx) error {
 
 	// Check if the task belongs to the authenticated user
 	user := GetUserByID(c)
-	if task.CreatedBy != user.ID {
+	if !utils.HasPermission(task.CreatedBy, user.ID) {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "You are not authorized to delete this task"})
+	}
+
+	// Delete associated comments
+	if err := config.DB.Table("comments").Where("task_id = ?", taskID).Delete(&models.Comment{}).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete comments before deleting task"})
+	}
+
+	// Delete associated histories
+	if err := config.DB.Table("histories").Where("task_id = ?", taskID).Delete(&models.History{}).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete history before deleting task"})
 	}
 
 	// Delete the task

@@ -37,7 +37,7 @@ func ConnectDB() {
 	DB = db
 
 	// Migrate the schemas
-	DB.AutoMigrate(&models.User{}, &models.Task{}, &models.Comment{})
+	DB.AutoMigrate(&models.User{}, &models.Task{}, &models.Comment{}, &models.History{})
 	fmt.Println("Database Migrated!")
 
 }
