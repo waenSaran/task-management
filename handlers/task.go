@@ -13,24 +13,46 @@ import (
 func GetAllTasks(c *fiber.Ctx) error {
 	var tasks []models.Task
 
+	pageQuery := c.Query("page", "1")          // Default to page 1
+	pageSizeQuery := c.Query("pageSize", "10") // Default to pageSize 10
+	// parse page and pageSize
+	page := utils.StrToInt(pageQuery)
+	pageSize := utils.StrToInt(pageSizeQuery)
+	title := c.Query("title", "")
+	status := c.Query("status", "")
+	assignee := c.Query("assignee", "")
+	createdBy := c.Query("createdBy", "")
+
 	// Initialize query builder
 	query := config.DB.Model(&models.Task{})
 
 	// Apply filters based on query params
-	status := c.Query("status")
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
-
-	createdBy := c.Query("createdBy")
 	if createdBy != "" {
 		query = query.Where("created_by = ?", createdBy)
 	}
-
-	title := c.Query("title")
 	if title != "" {
 		query = query.Where("title LIKE ?", "%"+title+"%")
 	}
+	if assignee != "" {
+		query = query.Where("assignee = ?", assignee)
+	}
+
+	var count int64
+	query.Count(&count)
+
+	var totalPages int
+	if count%int64(pageSize) == 0 {
+		totalPages = int(count) / pageSize
+	} else {
+		totalPages = int(count)/pageSize + 1
+	}
+
+	// Apply pagination
+	offset := (page - 1) * pageSize
+	query = query.Offset(offset).Limit(pageSize)
 
 	// Execute query and fetch tasks
 	if err := query.Find(&tasks).Error; err != nil {
@@ -40,7 +62,21 @@ func GetAllTasks(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to retrieve tasks"})
 	}
 
-	return c.JSON(tasks)
+	// format each task and get total count
+	var data []interface{}
+	for _, task := range tasks {
+		data = append(data, models.FormatTaskResponse(task))
+	}
+
+	response := models.TransformPagination(&models.Pagination{
+		Page:       page,
+		PageSize:   pageSize,
+		Total:      int(count),
+		TotalPages: totalPages,
+		Data:       data,
+	})
+
+	return c.JSON(response)
 }
 
 func CreateTask(c *fiber.Ctx) error {
@@ -174,7 +210,7 @@ func DeleteTask(c *fiber.Ctx) error {
 
 // return true if stutus is in type enum utils.Status
 func validateStatus(status string) bool {
-	return status == string(utils.Todo) || status == string(utils.InProgress) || status == string(utils.Done)
+	return status == string(utils.Todo) || status == string(utils.InProgress) || status == string(utils.Done) || status == string(utils.Archive)
 }
 
 func getTaskWithDetails(taskID string) (models.TaskDetailsResponse, error) {
