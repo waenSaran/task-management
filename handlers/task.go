@@ -67,17 +67,13 @@ func CreateTask(c *fiber.Ctx) error {
 func GetTaskById(c *fiber.Ctx) error {
 	taskID := c.Params("id")
 
-	var task models.Task
-	if err := config.DB.Preload("CreatedUser").Preload("UpdatedUser").Preload("AssigneeUser").First(&task, "id = ?", taskID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Task not found"})
-		}
+	taskDetails, err := getTaskWithDetails(taskID)
+
+	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to retrieve task"})
 	}
 
-	res := models.FormatTaskResponse(task)
-
-	return c.JSON(res)
+	return c.JSON(taskDetails)
 }
 
 func UpdateTask(c *fiber.Ctx) error {
@@ -107,13 +103,28 @@ func UpdateTask(c *fiber.Ctx) error {
 		Title:       updatedTask.Title,
 		Description: updatedTask.Description,
 		Status:      updatedTask.Status,
-		Assignee:    updatedTask.Assignee,
 		UpdatedBy:   user.ID,
 	}
 
+	updatedTask.UpdatedBy = user.ID // for history
+
 	// Update history before updating the task
-	if err := AddHistory(taskID, payload); err != nil {
+	if err := AddHistory(taskID, updatedTask); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update history"})
+	}
+
+	// validate assignee if assignee exists in payload
+	if updatedTask.Assignee != nil {
+		// remove assignee if assignee from payload is empty string
+		if *updatedTask.Assignee == "" {
+			if err := config.DB.Model(&task).Update("assignee", nil).Error; err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update assignee to null"})
+			}
+		} else if !validateAssignee(*updatedTask.Assignee) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Assignee must be a valid user ID"})
+		} else {
+			payload.Assignee = updatedTask.Assignee
+		}
 	}
 
 	// Update the task
@@ -164,4 +175,76 @@ func DeleteTask(c *fiber.Ctx) error {
 // return true if stutus is in type enum utils.Status
 func validateStatus(status string) bool {
 	return status == string(utils.Todo) || status == string(utils.InProgress) || status == string(utils.Done)
+}
+
+func getTaskWithDetails(taskID string) (models.TaskDetailsResponse, error) {
+	var task models.Task
+	var comments []models.Comment
+	var history []models.History
+
+	// Fetch the task by ID
+	if err := config.DB.Preload("CreatedUser").Preload("UpdatedUser").Preload("AssigneeUser").First(&task, "id = ?", taskID).Error; err != nil {
+		return models.TaskDetailsResponse{}, err
+	}
+
+	// Fetch the comments for the task
+	if err := config.DB.Preload("User").Where("task_id = ?", taskID).Find(&comments).Error; err != nil {
+		return models.TaskDetailsResponse{}, err
+	}
+
+	// Fetch the task history
+	if err := config.DB.Preload("ChangedUser").Where("task_id = ?", taskID).Find(&history).Error; err != nil {
+		return models.TaskDetailsResponse{}, err
+	}
+
+	var commentsResponse []models.CommentResponse
+	var historyResponse []models.HistoryResponse
+	// Format the comments
+	for _, comment := range comments {
+		commentsResponse = append(commentsResponse, models.FormatCommentResponse(comment))
+	}
+	// Format the history
+	for _, history := range history {
+		h, err := models.FormatHistoryResponse(history)
+		if err != nil {
+			return models.TaskDetailsResponse{}, err
+		}
+		historyResponse = append(historyResponse, h)
+	}
+
+	createdBy := task.CreatedBy
+	updatedBy := task.UpdatedBy
+	assignee := task.Assignee
+	if task.CreatedUser.Email != "" {
+		createdBy = task.CreatedUser.Email
+	}
+	if task.UpdatedUser.Email != "" {
+		updatedBy = task.UpdatedUser.Email
+	}
+	if task.AssigneeUser.Email != "" {
+		*assignee = task.AssigneeUser.Email
+	}
+	// Format the response
+	response := models.TaskDetailsResponse{
+		ID:          task.ID,
+		Title:       task.Title,
+		Status:      string(task.Status),
+		Description: task.Description,
+		CreatedAt:   task.CreatedAt,
+		UpdatedAt:   task.UpdatedAt,
+		CreatedBy:   createdBy,
+		UpdatedBy:   updatedBy,
+		Assignee:    assignee,
+		Comments:    commentsResponse,
+		History:     historyResponse,
+	}
+
+	return response, nil
+}
+
+func validateAssignee(userID string) bool {
+	if err := config.DB.First(&models.User{}, "id = ?", userID).Error; err != nil {
+		return false
+	}
+	return true
 }

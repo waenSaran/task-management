@@ -27,11 +27,15 @@ type CommentResponse struct {
 }
 
 func FormatCommentResponse(comment Comment) CommentResponse {
+	createdBy := comment.CreatedBy
+	if comment.User.Email != "" {
+		createdBy = comment.User.Email
+	}
 	return CommentResponse{
 		ID:        comment.ID,
 		Content:   comment.Content,
 		TaskID:    comment.TaskID,
-		CreatedBy: comment.CreatedBy,
+		CreatedBy: createdBy,
 		CreatedAt: comment.CreatedAt,
 		UpdatedAt: comment.UpdatedAt,
 	}

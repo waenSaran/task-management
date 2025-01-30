@@ -23,6 +23,17 @@ func AddHistory(taskID string, task models.Task) error {
 	if task.Status != "" && oldTask.Status != task.Status {
 		changes["status"] = map[string]string{"from": string(oldTask.Status), "to": string(task.Status)}
 	}
+	if task.Assignee != nil && oldTask.Assignee != task.Assignee {
+		var oldAssignee string
+		var newAssignee string
+		if oldTask.Assignee != nil {
+			oldAssignee = *oldTask.Assignee
+		}
+		if task.Assignee != nil {
+			newAssignee = *task.Assignee
+		}
+		changes["assignee"] = map[string]string{"from": oldAssignee, "to": newAssignee}
+	}
 
 	// If no changes, return nil
 	if len(changes) == 0 {

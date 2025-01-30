@@ -41,10 +41,15 @@ func FormatHistoryResponse(history History) (HistoryResponse, error) {
 		return HistoryResponse{}, err
 	}
 
+	changedBy := history.ChangedBy
+	if history.ChangedUser.Email != "" {
+		changedBy = history.ChangedUser.Email
+	}
+
 	return HistoryResponse{
 		ID:        history.ID,
 		TaskID:    history.TaskID,
-		ChangedBy: history.ChangedBy,
+		ChangedBy: changedBy,
 		Changes:   changes,
 		ChangedAt: history.ChangedAt,
 	}, nil

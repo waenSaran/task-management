@@ -19,7 +19,7 @@ type Task struct {
 	Title       string       `json:"title"`
 	Description string       `json:"description"`
 	Status      utils.Status `gorm:"type:varchar(20);default:'TODO'" json:"status"`
-	Assignee    *string      `gorm:"type:uuid" json:"assignee"`
+	Assignee    *string      `gorm:"type:uuid;default:NULL" json:"assignee"`
 	CreatedBy   string       `gorm:"type:uuid" json:"created_by"`
 	UpdatedBy   string       `gorm:"type:uuid" json:"updated_by"`
 	CreatedAt   time.Time    `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
@@ -43,6 +43,20 @@ type TaskResponse struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+type TaskDetailsResponse struct {
+	ID          string            `json:"id"`
+	Title       string            `json:"title"`
+	Description string            `json:"description"`
+	Status      string            `json:"status"`
+	Assignee    *string           `json:"assignee,omitempty"`
+	CreatedBy   string            `json:"created_by"`
+	UpdatedBy   string            `json:"updated_by"`
+	CreatedAt   time.Time         `json:"created_at"`
+	UpdatedAt   time.Time         `json:"updated_at"`
+	Comments    []CommentResponse `json:"comments"`
+	History     []HistoryResponse `json:"history"`
+}
+
 // Function to convert Task model to response format
 func FormatTaskResponse(task Task) TaskResponse {
 	// using user id instead of email for task creation
@@ -56,7 +70,7 @@ func FormatTaskResponse(task Task) TaskResponse {
 		updatedBy = task.UpdatedUser.Email
 	}
 	if task.AssigneeUser.Email != "" {
-		assignee = &task.AssigneeUser.Email
+		*assignee = task.AssigneeUser.Email
 	}
 
 	return TaskResponse{
@@ -66,7 +80,7 @@ func FormatTaskResponse(task Task) TaskResponse {
 		Status:      string(task.Status),
 		Assignee:    assignee,
 		CreatedBy:   createdBy,
-		UpdatedBy:   updatedBy, // Extract email
+		UpdatedBy:   updatedBy,
 		CreatedAt:   task.CreatedAt,
 		UpdatedAt:   task.UpdatedAt,
 	}
